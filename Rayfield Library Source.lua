@@ -1,14 +1,6 @@
---[[
-
-Rayfield Interface Suite
-by Sirius
-
-shlex | Designing + Programming
-iRay  | Programming
-
-]]
-
-
+-- by Sirius
+-- shlex | Designing + Programming
+-- iRay  | Programming
 
 local Release = "Beta 8"
 local NotificationDuration = 6.5
@@ -2489,5 +2481,6 @@ if Rayfield:FindFirstChild("Notice") then
 		Rayfield.Notice.Visible = false
 	end)
 end
+
 
 	return RayfieldLibrary
