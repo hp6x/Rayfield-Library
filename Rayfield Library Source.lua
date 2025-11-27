@@ -8,6 +8,9 @@
 	Max    | Programming
 	Damian | Programming
 
+	- not original dev, just added stupid shit.
+	+ hp6x | Skid
+
 ]]
 
 if debugX then
@@ -82,6 +85,9 @@ local settingsTable = {
 		-- buildwarnings
 		-- rayfieldprompts
 
+		-- Accent customization
+		toggleColor = {Type = 'color', Value = {r = 0, g = 146, b = 214}, Name = 'Toggle Color'},
+		sliderColor = {Type = 'color', Value = {r = 50, g = 138, b = 220}, Name = 'Slider Color'},
 	},
 	System = {
 		usageAnalytics = {Type = 'toggle', Value = true, Name = 'Anonymised Analytics'},
@@ -172,7 +178,13 @@ local function loadSettings()
 						for settingName, setting in pairs(settingCategory) do
 							if file[categoryName][settingName] then
 								setting.Value = file[categoryName][settingName].Value
-								setting.Element:Set(getSetting(categoryName, settingName))
+								if setting.Element and setting.Type == 'color' then
+									local v = setting.Value
+									local c = (type(v) == 'table' and v.r and v.g and v.b) and Color3.fromRGB(v.r, v.g, v.b) or nil
+									if c then setting.Element:Set(c) end
+								elseif setting.Element and setting.Element.Set then
+									setting.Element:Set(getSetting(categoryName, settingName))
+								end
 							end
 						end
 					end
@@ -755,12 +767,46 @@ local Notifications = Rayfield.Notifications
 
 local SelectedTheme = RayfieldLibrary.Theme.Default
 
+-- Accent override helpers
+local function _tblToColor3(tbl)
+	if type(tbl) == "table" and tbl.r and tbl.g and tbl.b then
+		return Color3.fromRGB(tbl.r, tbl.g, tbl.b)
+	end
+	return nil
+end
+
+local function _adjust(c, delta)
+	local h,s,v = c:ToHSV()
+	v = math.clamp(v + delta, 0, 1)
+	return Color3.fromHSV(h, s, v)
+end
+
+local function applyAccentOverrides()
+	local tTbl = getSetting('General','toggleColor')
+	local sTbl = getSetting('General','sliderColor')
+	local tCol = _tblToColor3(tTbl)
+	local sCol = _tblToColor3(sTbl)
+	if tCol then
+		SelectedTheme.ToggleEnabled = tCol
+		SelectedTheme.ToggleEnabledStroke = _adjust(tCol, 0.15)
+		SelectedTheme.ToggleEnabledOuterStroke = _adjust(tCol, -0.2)
+	end
+	if sCol then
+		SelectedTheme.SliderBackground = _adjust(sCol, -0.15)
+		SelectedTheme.SliderProgress = sCol
+		SelectedTheme.SliderStroke = _adjust(sCol, 0.1)
+	end
+end
+
 local function ChangeTheme(Theme)
 	if typeof(Theme) == 'string' then
 		SelectedTheme = RayfieldLibrary.Theme[Theme]
 	elseif typeof(Theme) == 'table' then
 		SelectedTheme = Theme
 	end
+
+	-- Apply user accent overrides
+	applyAccentOverrides()
 
 	Rayfield.Main.BackgroundColor3 = SelectedTheme.Background
 	Rayfield.Main.Topbar.BackgroundColor3 = SelectedTheme.Topbar
@@ -1552,6 +1598,22 @@ local function createSettings(window)
 						updateSetting(categoryName, settingName, Value)
 					end,
 				})
+			elseif setting.Type == 'color' then
+				local initial = setting.Value
+				local initialColor = (type(initial) == 'table' and initial.r and initial.g and initial.b) and Color3.fromRGB(initial.r, initial.g, initial.b) or Color3.fromRGB(255,255,255)
+				setting.Element = newTab:CreateColorPicker({
+					Name = setting.Name,
+					Color = initialColor,
+					Ext = true,
+					Callback = function(c)
+						local r = math.floor(c.R*255+0.5)
+						local g = math.floor(c.G*255+0.5)
+						local b = math.floor(c.B*255+0.5)
+						updateSetting(categoryName, settingName, {r=r,g=g,b=b})
+						-- Re-apply theme to propagate accent changes
+						ChangeTheme(SelectedTheme)
+					end,
+				})
 			end
 		end
 	end
@@ -1668,6 +1730,9 @@ function RayfieldLibrary:CreateWindow(Settings)
 			warn('issue rendering theme. no theme on file')
 			print(result)
 		end
+	else
+		-- Apply default theme to ensure accent overrides are also applied
+		pcall(ChangeTheme, 'Default')
 	end
 
 	Topbar.Visible = false
@@ -1960,9 +2025,13 @@ function RayfieldLibrary:CreateWindow(Settings)
 	TweenService:Create(Main, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0}):Play()
 	TweenService:Create(Main.Shadow.Image, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {ImageTransparency = 0.6}):Play()
 	task.wait(0.1)
-	TweenService:Create(LoadingFrame.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
-	task.wait(0.05)
-	TweenService:Create(LoadingFrame.Subtitle, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
+	if LoadingFrame:FindFirstChild('CenterIcon') and LoadingFrame.CenterIcon.Image ~= '' and LoadingFrame.CenterIcon.Image ~= nil then
+		TweenService:Create(LoadingFrame.CenterIcon, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {ImageTransparency = 0}):Play()
+	else
+		TweenService:Create(LoadingFrame.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
+		task.wait(0.05)
+		TweenService:Create(LoadingFrame.Subtitle, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
+	end
 	task.wait(0.05)
 	TweenService:Create(LoadingFrame.Version, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
 
@@ -2009,6 +2078,15 @@ function RayfieldLibrary:CreateWindow(Settings)
 		TabButton.Title.TextTransparency = 1
 		TabButton.Image.ImageTransparency = 1
 		TabButton.UIStroke.Transparency = 1
+
+		-- Icon-only tab (no text): hide label and center icon with tight width
+		local hasName = typeof(Name) == 'string' and string.match(Name, "%S") ~= nil
+		if not hasName and TabButton.Image.Visible then
+			TabButton.Title.Visible = false
+			TabButton.Image.AnchorPoint = Vector2.new(0.5, 0.5)
+			TabButton.Image.Position = UDim2.new(0.5, 0, 0.5, 0)
+			TabButton.Size = UDim2.new(0, 36, 0, 30)
+		end
 
 		TabButton.Visible = not Ext or false
 
