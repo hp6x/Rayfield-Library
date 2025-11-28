@@ -17,6 +17,97 @@ if debugX then
 	warn('Initialising Rayfield')
 end
 
+-- Rainbow/Effects state
+local _rainbowTabsRunning = false
+local _rainbowTabsThread
+local _rainbowTitleConn
+local _snowConn
+local _snowLayer
+local function enableRainbowTitle()
+    if _rainbowTitleConn then return end
+    _rainbowTitleConn = RunService.Heartbeat:Connect(function()
+        if not getSetting('General','rainbowTitle') then return end
+        local h = (tick()/3)%1
+        Topbar.Title.TextColor3 = Color3.fromHSV(h, 0.85, 1)
+    end)
+end
+local function disableRainbowTitle()
+    if _rainbowTitleConn then _rainbowTitleConn:Disconnect() _rainbowTitleConn = nil end
+    Topbar.Title.TextColor3 = SelectedTheme.TextColor
+end
+local function enableRainbowTabs()
+    if _rainbowTabsRunning then return end
+    _rainbowTabsRunning = true
+    _rainbowTabsThread = task.spawn(function()
+        while _rainbowTabsRunning and getSetting('General','rainbowTabs') do
+            local now = tick()
+            local idx = 0
+            for _, tabbtn in ipairs(TabList:GetChildren()) do
+                if tabbtn.ClassName == 'Frame' and tabbtn.Name ~= 'Template' and tabbtn.Name ~= 'Placeholder' then
+                    idx += 1
+                    local h = (now/4 + idx*0.13)%1
+                    local col = Color3.fromHSV(h, 0.9, 1)
+                    tabbtn.Title.TextColor3 = col
+                    tabbtn.Image.ImageColor3 = col
+                end
+            end
+            task.wait(0.15)
+        end
+    end)
+end
+local function disableRainbowTabs()
+    _rainbowTabsRunning = false
+    if _rainbowTabsThread then _rainbowTabsThread = nil end
+    -- restore theme colors
+    for _, tabbtn in ipairs(TabList:GetChildren()) do
+        if tabbtn.ClassName == 'Frame' and tabbtn.Name ~= 'Template' and tabbtn.Name ~= 'Placeholder' then
+            local isCurrent = tostring(Elements.UIPageLayout.CurrentPage) == tabbtn.Title.Text
+            tabbtn.Title.TextColor3 = isCurrent and SelectedTheme.SelectedTabTextColor or SelectedTheme.TabTextColor
+            tabbtn.Image.ImageColor3 = isCurrent and SelectedTheme.SelectedTabTextColor or SelectedTheme.TabTextColor
+        end
+    end
+end
+local function startSnowEffects()
+    if _snowConn or _snowLayer then return end
+    if not getSetting('General','backgroundEffects') then return end
+    if SelectedTheme ~= RayfieldLibrary.Theme.Default then return end
+    _snowLayer = Instance.new('Frame')
+    _snowLayer.Name = 'SnowLayer'
+    _snowLayer.BackgroundTransparency = 1
+    _snowLayer.ZIndex = 0
+    _snowLayer.Size = UDim2.fromScale(1,1)
+    _snowLayer.Parent = Main
+    local flakes = {}
+    local function spawnFlake()
+        local f = Instance.new('Frame')
+        f.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        f.BackgroundTransparency = 0.2
+        f.BorderSizePixel = 0
+        f.Size = UDim2.fromOffset(math.random(2,4), math.random(2,4))
+        f.Position = UDim2.fromOffset(math.random(0, Main.AbsoluteSize.X), -10)
+        f.Parent = _snowLayer
+        table.insert(flakes, {ui=f, speed=math.random(20,40)/100})
+    end
+    for i=1,25 do spawnFlake() end
+    _snowConn = RunService.Heartbeat:Connect(function(dt)
+        if not _snowLayer or not _snowLayer.Parent then return end
+        for _, fl in ipairs(flakes) do
+            local p = fl.ui.Position
+            local y = p.Y.Offset + (fl.speed * 60 * dt)
+            local x = p.X.Offset + math.sin((tick()+fl.speed)*2)
+            if y > Main.AbsoluteSize.Y + 10 then
+                fl.ui.Position = UDim2.fromOffset(math.random(0, Main.AbsoluteSize.X), -10)
+            else
+                fl.ui.Position = UDim2.fromOffset(x, y)
+            end
+        end
+    end)
+end
+local function stopSnowEffects()
+    if _snowConn then _snowConn:Disconnect() _snowConn = nil end
+    if _snowLayer then _snowLayer:Destroy() _snowLayer = nil end
+end
+
 local function getService(name)
 	local service = game:GetService(name)
 	return if cloneref then cloneref(service) else service
@@ -81,13 +172,16 @@ local ConfigurationExtension = ".rfld"
 local settingsTable = {
 	General = {
 		-- if needs be in order just make getSetting(name)
-		rayfieldOpen = {Type = 'bind', Value = 'K', Name = 'Rayfield Keybind'},
+		rayfieldOpen = {Type = 'bind', Value = 'RightShift', Name = 'Rayfield Keybind'},
 		-- buildwarnings
 		-- rayfieldprompts
 
 		-- Accent customization
 		toggleColor = {Type = 'color', Value = {r = 0, g = 146, b = 214}, Name = 'Toggle Color'},
 		sliderColor = {Type = 'color', Value = {r = 50, g = 138, b = 220}, Name = 'Slider Color'},
+		rainbowTabs = {Type = 'toggle', Value = false, Name = 'Rainbow Tabs'},
+		rainbowTitle = {Type = 'toggle', Value = false, Name = 'Rainbow Title'},
+		backgroundEffects = {Type = 'toggle', Value = true, Name = 'Background Effects'},
 	},
 	System = {
 		usageAnalytics = {Type = 'toggle', Value = true, Name = 'Anonymised Analytics'},
@@ -1691,7 +1785,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 	LoadingFrame.Subtitle.Text = Settings.LoadingSubtitle or "Interface Suite"
 
 	if Settings.LoadingTitle ~= "Rayfield Interface Suite" then
-		LoadingFrame.Version.Text = "Rayfield UI"
+
 	end
 
 	if Settings.Icon and Settings.Icon ~= 0 and Topbar:FindFirstChild('Icon') then
