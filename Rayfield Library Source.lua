@@ -17,6 +17,9 @@ if debugX then
 	warn('Initialising Rayfield')
 end
 
+-- Track session start for uptime display
+local sessionStart = tick()
+
 -- Rainbow/Effects state
 local _rainbowTabsRunning = false
 local _rainbowTabsThread
@@ -293,6 +296,60 @@ local function loadSettings()
 			warn('Rayfield had an issue accessing configuration saving capability.')
 		end
 	end
+
+	-- Info sections
+	newTab:CreateSection('Game Info')
+	local placeId = game.PlaceId
+	local jobId = game.JobId or ''
+	local serverPlayers = #Players:GetPlayers()
+	local gameName = 'Unknown'
+	pcall(function()
+		local info = game:GetService('MarketplaceService'):GetProductInfo(placeId)
+		if info and info.Name then gameName = info.Name end
+	end)
+	local gameInfoLabel = newTab:CreateLabel(('Game: %s | PlaceId: %s | Players: %d'):format(gameName, tostring(placeId), serverPlayers))
+	newTab:CreateButton({Name = 'Copy PlaceId', Ext = true, Callback = function()
+		pcall(function() if setclipboard then setclipboard(tostring(placeId)) end end)
+	end})
+	newTab:CreateButton({Name = 'Copy JobId', Ext = true, Callback = function()
+		pcall(function() if setclipboard then setclipboard(tostring(jobId)) end end)
+	end})
+
+	newTab:CreateSection('User Info')
+	local lp = Players.LocalPlayer
+	local username = lp and lp.Name or 'Unknown'
+	local userId = lp and lp.UserId or 0
+	local accountDays = lp and lp.AccountAge or 0
+	local uptimeLabel = newTab:CreateLabel('Session: 0s')
+	local userInfoLabel = newTab:CreateLabel(('User: %s | Id: %s | Account Age: %d days'):format(username, tostring(userId), accountDays))
+	newTab:CreateButton({Name = 'Copy Username', Ext = true, Callback = function()
+		pcall(function() if setclipboard then setclipboard(tostring(username)) end end)
+	end})
+	newTab:CreateButton({Name = 'Copy UserId', Ext = true, Callback = function()
+		pcall(function() if setclipboard then setclipboard(tostring(userId)) end end)
+	end})
+
+	-- Refresh UI button
+	newTab:CreateSection('Utilities')
+	newTab:CreateButton({Name = 'Refresh UI', Ext = true, Callback = function()
+		pcall(ChangeTheme, SelectedTheme)
+		if getSetting('General','rainbowTitle') then enableRainbowTitle() else disableRainbowTitle() end
+		if getSetting('General','rainbowTabs') then enableRainbowTabs() else disableRainbowTabs() end
+		if getSetting('General','backgroundEffects') then startSnowEffects() else stopSnowEffects() end
+	end})
+
+	-- Uptime updater
+	if _uptimeConn then _uptimeConn:Disconnect() end
+	_uptimeConn = RunService.Heartbeat:Connect(function()
+		local elapsed = math.max(0, tick() - sessionStart)
+		local secs = math.floor(elapsed % 60)
+		local mins = math.floor((elapsed/60) % 60)
+		local hours = math.floor((elapsed/3600) % 24)
+		local days = math.floor((elapsed/86400) % 7)
+		local weeks = math.floor(elapsed/604800)
+		local text = ('Session: %dw %dd %dh %dm %ds'):format(weeks, days, hours, mins, secs)
+		pcall(function() if uptimeLabel and uptimeLabel.Set then uptimeLabel:Set(text) end end)
+	end)
 end
 
 if debugX then
@@ -1624,6 +1681,9 @@ local function saveSettings() -- Save settings to config file
 			end
 		end
 		if writefile then
+			pcall(function()
+				if not isfolder(RayfieldFolder) then makefolder(RayfieldFolder) end
+			end)
 			writefile(RayfieldFolder..'/settings'..ConfigurationExtension, encoded)
 		end
 	end
